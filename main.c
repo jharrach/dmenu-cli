@@ -6,6 +6,8 @@
 #include <termios.h>
 #include <signal.h>
 
+#include "ansi.h"
+
 volatile sig_atomic_t signal_recv;
 
 static void signal_handler(int sig) {
@@ -40,7 +42,7 @@ size_t pvec_push(Pvec *dst, void *p) {
 
 	if (dst->size == dst->capacity) {
 		dst->capacity += 1024;
-		tmp = realloc(dst->vec, dst->capacity * sizeof(void *));
+		tmp = realloc(dst->vec, dst->capacity * sizeof(*(dst->vec)));
 		if (tmp == NULL) {
 			return SIZE_MAX;
 		}
@@ -124,39 +126,96 @@ int init_terminal(struct termios *settings) {
 		return -1;
 	}
 	new_settings = *settings;
-	new_settings.c_lflag &= ~(ICANON);
+	new_settings.c_lflag &= ~(ECHO | ICANON);
 	if (tcsetattr(fd, TCSANOW, &new_settings) == -1) {
 		perror("smenu: tcsetattr");
 		return -1;
 	}
+	fprintf(stderr, ANSI_CUHIDE);
 	return fd;
 }
 
 void restore_terminal(struct termios const *settings, int fd) {
 	tcsetattr(fd, TCSANOW, settings);
+	fprintf(stderr, ANSI_CUSHOW);
 }
 
 int show_menu(Pvec const *input, int fd) {
 	ssize_t bytes_read;
+	int ctrl_seq = 0;
+	size_t selected_entry = 0;
 
-	for (size_t i = 0; i < input->size; ++i) {
-		printf("%s\n", (char const *)input->vec[i]);
-	}
 	for (char c; signal_recv == 0;) {
+		fprintf(stderr, ANSI_EL(2) ANSI_CHA(0) );
+		for (size_t i = 0;; ++i) {
+			if (i == selected_entry) {
+				fprintf(stderr, ANSI_BG_BLUE "%s" ANSI_BG_DEFAULT, (char const *)input->vec[i]);
+			} else {
+				fprintf(stderr, "%s", (char const *)input->vec[i]);
+			}
+			if (i + 1 == input->size) {
+				break;
+			}
+			fprintf(stderr, " ");
+		}
 		bytes_read = read(fd, &c, 1);
 		if (bytes_read == -1 && signal_recv == 0) {
 			perror("smenu: read");
 			return -1;
 		}
+		if (ctrl_seq) {
+			if (ctrl_seq == 1 && c == '[') {
+				ctrl_seq += 2;
+				continue;
+			}
+			if (ctrl_seq == 3) {
+				switch (c) {
+					case 'B':
+					case 'C':
+						if (selected_entry + 1 != input->size) {
+							selected_entry += 1;
+						}
+						break;
+					case 'A':
+					case 'D':
+						if (selected_entry != 0) {
+							selected_entry -= 1;
+						}
+						break;
+					default:
+						ctrl_seq = 0;
+				}
+			}
+			if (ctrl_seq) {
+				ctrl_seq = 0;
+				continue;
+			}
+			ctrl_seq = 0;
+		}
 		switch (c) {
-			case '\x1b':
 			case '\x4':
-				printf("\n");
+				fprintf(stderr, "\n");
 				return 0;
-			default:
-				printf("%d\n", c);
+			case '\x1b':
+				ctrl_seq = 1;
+				break;
+			case '\xe':
+				if (selected_entry + 1 != input->size) {
+					selected_entry += 1;
+				}
+				break;
+			case '\x10':
+				if (selected_entry != 0) {
+					selected_entry -= 1;
+				}
+				break;
+			case '\xa':
+				fprintf(stderr, "\n");
+				printf("%s\n", (char const *)input->vec[selected_entry]);
+				return 0;
 		}
 	}
+	fprintf(stderr, "\n");
 	return 0;
 }
 
