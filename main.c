@@ -97,7 +97,34 @@ int string_push_char_array(String *dst, char const *src) {
 		}
 		dst->str = tmp;
 	}
-	for (size_t i = 0; src[i]; ++i) {
+	for (size_t i = 0; i < src_size; ++i) {
+		dst->str[i + dst->size] = src[i];
+	}
+	dst->size = new_size_with_terminator - 1;
+	dst->str[dst->size] = 0;
+	return 0;
+}
+
+int string_push_n_char_array(String *dst, char const *src, size_t n) {
+	size_t src_size = strlen(src);
+	char *tmp;
+
+	if (src_size > n) {
+		src_size = n;
+	}
+	size_t new_size_with_terminator = dst->size + src_size + 1; // TODO overflow
+	if (new_size_with_terminator > dst->capacity) {
+		dst->capacity += 3;
+		if (new_size_with_terminator > dst->capacity) {
+			dst->capacity = new_size_with_terminator;
+		}
+		tmp = realloc(dst->str, dst->capacity * sizeof(*(dst->str)));
+		if (tmp == NULL) {
+			return -1;
+		}
+		dst->str = tmp;
+	}
+	for (size_t i = 0; i < src_size; ++i) {
 		dst->str[i + dst->size] = src[i];
 	}
 	dst->size = new_size_with_terminator - 1;
@@ -217,7 +244,9 @@ void print_menu(String *output_buf, Pvec const *input, size_t selected_entry, st
 	if (strlen(input->vec[selected_entry]) + 2 > available_size) {
 		string_push_char_array(output_buf, selected_entry != 0 ? " < " : "   ");
 		string_push_char_array(output_buf, selected_entry_bg_color);
-		string_push_char_array(output_buf, "..."); // TODO prepend selected entry with max width
+		string_push_char_array(output_buf, " ");
+		string_push_n_char_array(output_buf, (char const *)input->vec[selected_entry], available_size - 4);
+		string_push_char_array(output_buf, "...");
 		string_push_char_array(output_buf, ANSI_BG_DEFAULT);
 		string_push_char_array(output_buf, selected_entry + 1 != input->size ? " > " : "   ");
 		string_print(output_buf, 2);
