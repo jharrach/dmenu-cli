@@ -276,7 +276,7 @@ void print_menu(String *output_buf, Pvec const *input, size_t selected_entry, st
 		}
 		available_size -= i_size;
 		if (i == selected_entry) {
-			string_push_char_array(output_buf, ANSI_BG_BLUE);
+			string_push_char_array(output_buf, selected_entry_bg_color);
 			string_push_char_array(output_buf, " ");
 			string_push_char_array(output_buf, (char const *)input->vec[i]);
 			string_push_char_array(output_buf, " ");
