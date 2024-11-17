@@ -214,7 +214,7 @@ void print_menu(String *output_buf, Pvec const *input, size_t selected_entry, st
 	available_size = w->ws_col - 6;
 	string_empty(output_buf);
 	string_push_char_array(output_buf, ANSI_EL(2) ANSI_CHA(0));
-	if (strlen(input->vec[selected_entry]) > available_size) {
+	if (strlen(input->vec[selected_entry]) + 2 > available_size) {
 		string_push_char_array(output_buf, selected_entry != 0 ? " < " : "   ");
 		string_push_char_array(output_buf, selected_entry_bg_color);
 		string_push_char_array(output_buf, "..."); // TODO prepend selected entry with max width
@@ -227,8 +227,8 @@ void print_menu(String *output_buf, Pvec const *input, size_t selected_entry, st
 	size_t page_start = 0;
 	// rules out any string larger than available size from page_start to selelcted_entry
 	for (size_t i = 0;;) {
-		page_size += strlen((char const *)input->vec[i]) + 1;
-		if (page_size - 1 > available_size && page_start != i) {
+		page_size += strlen((char const *)input->vec[i]) + 2;
+		if (page_size > available_size && page_start != i) {
 			page_start = i;
 			page_size = 0;
 			continue;
@@ -241,23 +241,21 @@ void print_menu(String *output_buf, Pvec const *input, size_t selected_entry, st
 	string_push_char_array(output_buf, page_start != 0 ? " < " : "   ");
 	size_t i = page_start;
 	for (;i < input->size; ++i) {
-		size_t i_size = strlen((char const *)input->vec[i]);
-		if (i != page_start) {
-			i_size += 1;
-		}
+		size_t i_size = strlen((char const *)input->vec[i]) + 2;
 		if (available_size < i_size) {
 			break;
 		}
 		available_size -= i_size;
-		if (i != page_start) {
-			string_push_char_array(output_buf, " ");
-		}
 		if (i == selected_entry) {
 			string_push_char_array(output_buf, ANSI_BG_BLUE);
+			string_push_char_array(output_buf, " ");
 			string_push_char_array(output_buf, (char const *)input->vec[i]);
+			string_push_char_array(output_buf, " ");
 			string_push_char_array(output_buf, ANSI_BG_DEFAULT);
 		} else {
+			string_push_char_array(output_buf, " ");
 			string_push_char_array(output_buf, (char const *)input->vec[i]);
+			string_push_char_array(output_buf, " ");
 		}
 	}
 	string_push_char_array(output_buf, i != input->size ? " > " : "   ");
