@@ -5,8 +5,11 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <signal.h>
+#include <sys/ioctl.h>
 
 #include "ansi.h"
+
+static char const *selected_entry_bg_color = ANSI_BG_BLUE;
 
 volatile sig_atomic_t signal_recv;
 
@@ -24,11 +27,13 @@ void init_signal(void) {
 	sigaddset(&new_action.sa_mask, SIGINT);
 	sigaddset(&new_action.sa_mask, SIGQUIT);
 	sigaddset(&new_action.sa_mask, SIGPIPE);
+	sigaddset(&new_action.sa_mask, SIGWINCH);
 
 	new_action.sa_handler = signal_handler;
 	sigaction(SIGINT, &new_action, NULL);
 	sigaction(SIGQUIT, &new_action, NULL);
 	sigaction(SIGPIPE, &new_action, NULL);
+	sigaction(SIGWINCH, &new_action, NULL);
 }
 
 typedef struct {
@@ -51,6 +56,66 @@ size_t pvec_push(Pvec *dst, void *p) {
 	dst->vec[dst->size] = p;
 	++dst->size;
 	return dst->size - 1;
+}
+
+typedef struct {
+	size_t capacity;
+	size_t size;
+	char *str;
+} String;
+
+size_t strlen(char const *s) {
+	size_t len = 0;
+	for (; s[len]; ++len) ;
+	return len;
+}
+
+int string_init(String *s) {
+	s->capacity = 3;
+	s->str = malloc(s->capacity * sizeof(*(s->str)));
+	if (s->str == NULL) {
+		return -1;
+	}
+	s->size = 0;
+	s->str[s->size] = 0;
+	return 0;
+}
+
+int string_push_char_array(String *dst, char const *src) {
+	size_t src_size = strlen(src);
+	char *tmp;
+
+	size_t new_size_with_terminator = dst->size + src_size + 1; // TODO overflow
+	if (new_size_with_terminator > dst->capacity) {
+		dst->capacity += 3;
+		if (new_size_with_terminator > dst->capacity) {
+			dst->capacity = new_size_with_terminator;
+		}
+		tmp = realloc(dst->str, dst->capacity * sizeof(*(dst->str)));
+		if (tmp == NULL) {
+			return -1;
+		}
+		dst->str = tmp;
+	}
+	for (size_t i = 0; src[i]; ++i) {
+		dst->str[i + dst->size] = src[i];
+	}
+	dst->size = new_size_with_terminator - 1;
+	dst->str[dst->size] = 0;
+	return 0;
+}
+
+void string_empty(String *s) {
+	s->size = 0;
+	s->str[s->size] = 0;
+}
+
+void string_debug(String const *s) {
+	printf("{\n\tstr: \"%s\",\n\tsize: %lu,\n\tcapacity: %lu\n}\n", s->str, s->size, s->capacity);
+}
+
+void string_print(String const *s, int fd) {
+	write(fd, s->str, s->size);
 }
 
 ssize_t read_input(Pvec *dst) {
@@ -140,24 +205,79 @@ void restore_terminal(struct termios const *settings, int fd) {
 	fprintf(stderr, ANSI_CUSHOW);
 }
 
+void print_menu(String *output_buf, Pvec const *input, size_t selected_entry, struct winsize const *w) {
+	unsigned int available_size;
+
+	if (w->ws_col < 10) {
+		return;
+	}
+	available_size = w->ws_col - 6;
+	string_empty(output_buf);
+	string_push_char_array(output_buf, ANSI_EL(2) ANSI_CHA(0));
+	if (strlen(input->vec[selected_entry]) > available_size) {
+		string_push_char_array(output_buf, selected_entry != 0 ? " < " : "   ");
+		string_push_char_array(output_buf, selected_entry_bg_color);
+		string_push_char_array(output_buf, "..."); // TODO prepend selected entry with max width
+		string_push_char_array(output_buf, ANSI_BG_DEFAULT);
+		string_push_char_array(output_buf, selected_entry + 1 != input->size ? " > " : "   ");
+		string_print(output_buf, 2);
+		return;
+	}
+	size_t page_size = 0;
+	size_t page_start = 0;
+	// rules out any string larger than available size from page_start to selelcted_entry
+	for (size_t i = 0;;) {
+		page_size += strlen((char const *)input->vec[i]) + 1;
+		if (page_size - 1 > available_size && page_start != i) {
+			page_start = i;
+			page_size = 0;
+			continue;
+		}
+		if (i == selected_entry) {
+			break;
+		}
+		++i;
+	}
+	string_push_char_array(output_buf, page_start != 0 ? " < " : "   ");
+	size_t i = page_start;
+	for (;i < input->size; ++i) {
+		size_t i_size = strlen((char const *)input->vec[i]);
+		if (i != page_start) {
+			i_size += 1;
+		}
+		if (available_size < i_size) {
+			break;
+		}
+		available_size -= i_size;
+		if (i != page_start) {
+			string_push_char_array(output_buf, " ");
+		}
+		if (i == selected_entry) {
+			string_push_char_array(output_buf, ANSI_BG_BLUE);
+			string_push_char_array(output_buf, (char const *)input->vec[i]);
+			string_push_char_array(output_buf, ANSI_BG_DEFAULT);
+		} else {
+			string_push_char_array(output_buf, (char const *)input->vec[i]);
+		}
+	}
+	string_push_char_array(output_buf, i != input->size ? " > " : "   ");
+	string_print(output_buf, 2);
+}
+
 int show_menu(Pvec const *input, int fd) {
 	ssize_t bytes_read;
 	int ctrl_seq = 0;
 	size_t selected_entry = 0;
+	struct winsize w;
+	String output_buf;
 
-	for (char c; signal_recv == 0;) {
-		fprintf(stderr, ANSI_EL(2) ANSI_CHA(0) );
-		for (size_t i = 0;; ++i) {
-			if (i == selected_entry) {
-				fprintf(stderr, ANSI_BG_BLUE "%s" ANSI_BG_DEFAULT, (char const *)input->vec[i]);
-			} else {
-				fprintf(stderr, "%s", (char const *)input->vec[i]);
-			}
-			if (i + 1 == input->size) {
-				break;
-			}
-			fprintf(stderr, " ");
+	string_init(&output_buf);
+	ioctl(1, TIOCGWINSZ, &w);
+	for (char c; signal_recv == 0 || signal_recv == SIGWINCH;) {
+		if (signal_recv == SIGWINCH) {
+			ioctl(1, TIOCGWINSZ, &w);
 		}
+		print_menu(&output_buf, input, selected_entry, &w);
 		bytes_read = read(fd, &c, 1);
 		if (bytes_read == -1 && signal_recv == 0) {
 			perror("smenu: read");
