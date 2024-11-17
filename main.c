@@ -208,7 +208,7 @@ void restore_terminal(struct termios const *settings, int fd) {
 void print_menu(String *output_buf, Pvec const *input, size_t selected_entry, struct winsize const *w) {
 	unsigned int available_size;
 
-	if (w->ws_col < 10) {
+	if (w->ws_col < 10 || input->size == 0) {
 		return;
 	}
 	available_size = w->ws_col - 6;
@@ -320,7 +320,7 @@ int show_menu(Pvec const *input, int fd) {
 				ctrl_seq = 1;
 				break;
 			case '\xe':
-				if (selected_entry + 1 != input->size) {
+				if (selected_entry + 1 < input->size) {
 					selected_entry += 1;
 				}
 				break;
