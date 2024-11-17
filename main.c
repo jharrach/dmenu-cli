@@ -299,10 +299,17 @@ int show_menu(Pvec const *input, int fd) {
 	String output_buf;
 
 	string_init(&output_buf);
-	ioctl(1, TIOCGWINSZ, &w);
+	ioctl(2, TIOCGWINSZ, &w);
+	unsigned short int prev_ws_col = w.ws_col;
 	for (char c; signal_recv == 0 || signal_recv == SIGWINCH;) {
 		if (signal_recv == SIGWINCH) {
-			ioctl(1, TIOCGWINSZ, &w);
+			ioctl(2, TIOCGWINSZ, &w);
+			if (prev_ws_col > w.ws_col) {
+				unsigned short removed_col = prev_ws_col - w.ws_col;
+				unsigned short added_row = removed_col / w.ws_col + (removed_col % w.ws_col != 0);
+				fprintf(stderr, ANSI_CPL(%u) ANSI_ED(0), added_row);
+			}
+			prev_ws_col = w.ws_col;
 		}
 		print_menu(&output_buf, input, selected_entry, &w);
 		bytes_read = read(fd, &c, 1);
