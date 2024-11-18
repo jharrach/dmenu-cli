@@ -2,6 +2,7 @@ NAME	:= smenu
 SRC		:= main.c
 OBJ		:= $(SRC:%.c=%.o)
 TAGS	:= tags
+DESTDIR	:= /usr/local/bin/
 
 .DEFAULT_GOAL := all
 
@@ -14,6 +15,15 @@ $(TAGS): $(SRC)
 
 clean:
 	$(RM) $(NAME) $(OBJ) $(TAGS)
+
+install: $(DESTDIR)$(NAME)
+
+uninstall:
+	$(RM) $(DESTDIR)$(NAME)
+
+$(DESTDIR)$(NAME): $(NAME)
+	cp $^ $@
+	chmod 755 $@
 
 $(NAME): $(OBJ)
 	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
