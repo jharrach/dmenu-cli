@@ -287,6 +287,9 @@ void print_menu(String *output_buf, Pvec const *input, size_t selected_entry, st
 			string_push_char_array(output_buf, " ");
 		}
 	}
+	for (; available_size; --available_size) {
+		string_push_char_array(output_buf, " ");
+	}
 	string_push_char_array(output_buf, i != input->size ? " > " : "   ");
 	string_print(output_buf, 2);
 }
