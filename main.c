@@ -156,7 +156,7 @@ ssize_t read_input(Pvec *dst) {
 	for (;;) {
 		bytes_read = read(0, read_buf, sizeof(read_buf));
 		if (bytes_read == -1) {
-			perror("smenu: read");
+			perror("dmenu-cli: read");
 			return -1;
 		}
 		if (bytes_read == 0) {
@@ -171,7 +171,7 @@ ssize_t read_input(Pvec *dst) {
 			if (additional_size != 0) {
 				read_buf_leftover = realloc(read_buf_leftover, leftover_size + additional_size + 1);
 				if (read_buf_leftover == NULL) {
-					perror("smenu: realloc");
+					perror("dmenu-cli: realloc");
 					return -1;
 				}
 				for (ssize_t j = 0; j < additional_size; ++j) {
@@ -185,7 +185,7 @@ ssize_t read_input(Pvec *dst) {
 			}
 			if (read_buf_leftover != NULL) {
 				if (pvec_push(dst, read_buf_leftover) == SIZE_MAX) {
-					perror("smenu: pvec_push");
+					perror("dmenu-cli: pvec_push");
 					return -1;	
 				}
 				read_buf_leftover = NULL;
@@ -196,7 +196,7 @@ ssize_t read_input(Pvec *dst) {
 	}
 	if (read_buf_leftover != NULL) {
 		if (pvec_push(dst, read_buf_leftover) == SIZE_MAX) {
-			perror("smenu: pvec_push");
+			perror("dmenu-cli: pvec_push");
 			return -1;	
 		}
 		read_buf_leftover = NULL;
@@ -210,17 +210,17 @@ int init_terminal(struct termios *settings) {
 	int fd = open("/dev/tty", O_RDONLY);
 
 	if (fd == -1) {
-		perror("smenu: open");
+		perror("dmenu-cli: open");
 		return -1;
 	}
 	if (tcgetattr(fd, settings) == -1) {
-		perror("smenu: tcgetattr");
+		perror("dmenu-cli: tcgetattr");
 		return -1;
 	}
 	new_settings = *settings;
 	new_settings.c_lflag &= ~(ECHO | ICANON);
 	if (tcsetattr(fd, TCSANOW, &new_settings) == -1) {
-		perror("smenu: tcsetattr");
+		perror("dmenu-cli: tcsetattr");
 		return -1;
 	}
 	fprintf(stderr, ANSI_CUHIDE);
@@ -317,7 +317,7 @@ int show_menu(Pvec const *input, int fd) {
 		print_menu(&output_buf, input, selected_entry, &w);
 		bytes_read = read(fd, &c, 1);
 		if (bytes_read == -1 && signal_recv == 0) {
-			perror("smenu: read");
+			perror("dmenu-cli: read");
 			return -1;
 		}
 		if (ctrl_seq) {

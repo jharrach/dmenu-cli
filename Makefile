@@ -1,4 +1,4 @@
-NAME	:= smenu
+NAME	:= dmenu-cli
 SRC		:= main.c
 OBJ		:= $(SRC:%.c=%.o)
 TAGS	:= tags
