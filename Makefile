@@ -1,12 +1,10 @@
-NAME	:= dmenu-cli
-SRC		:= main.c
-OBJ		:= $(SRC:%.c=%.o)
-TAGS	:= tags
-DESTDIR	:= /usr/local/bin/
+NAME    := dmenu-cli
+SRC     := main.c
+OBJ     := $(SRC:%.c=%.o)
+TAGS    := tags
+DESTDIR := /usr/local/bin/
 
-.DEFAULT_GOAL := all
-
-CFLAGS	:= -Wall -Wextra -Werror
+CFLAGS  := -Wall -Wextra -Werror
 
 all: $(NAME) $(TAGS)
 
